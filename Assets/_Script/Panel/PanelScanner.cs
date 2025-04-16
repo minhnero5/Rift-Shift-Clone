@@ -3,32 +3,29 @@ using UnityEngine;
 
 public class PanelScanner : MonoBehaviour
 {
-    public PanelScanner linkedPanel; // K?t n?i t?i panel còn l?i
-    public LayerMask detectableLayer;
+    public GameObject linkedObject; // Tham chi?u ??n t?m B ho?c A
 
-    private void Update()
+    private void OnTriggerEnter2D(Collider2D other)
     {
-        Collider[] hits = Physics.OverlapBox(transform.position, transform.localScale / 2f, Quaternion.identity, detectableLayer);
-
-        foreach (var hit in hits)
+        if (other.CompareTag("TriggerPoint")) // Object có tag ?? theo dõi
         {
-            // Copy ho?c di chuy?n object sang panel còn l?i
-            Vector3 localOffset = hit.transform.position - transform.position;
-            Vector3 targetPos = linkedPanel.transform.position + localOffset;
+            Debug.Log($"{gameObject.name} ch?m vào {other.name}");
 
-            // T?o b?n sao n?u ch?a có
-            if (!linkedPanel.HasObject(hit.gameObject))
+            // Gi? s? b?n mu?n b?t m?t v?t th? con bên trong linkedObject:
+            Transform linkedChild = linkedObject.transform.Find(other.name);
+            if (linkedChild != null)
             {
-                GameObject clone = Instantiate(hit.gameObject, targetPos, hit.transform.rotation);
-                clone.name = hit.name + "_Clone";
-                // Có th? ?ánh d?u clone n?u mu?n tránh clone ch?ng clone
+                linkedChild.gameObject.SetActive(true);
             }
         }
     }
 
-    public bool HasObject(GameObject original)
+    private void OnTriggerExit2D(Collider2D other)
     {
-        // Cách ki?m tra xem ?ã có b?n sao ch?a (tu? logic, có th? so name, tag, ho?c ?ánh d?u)
-        return GameObject.Find(original.name + "_Clone") != null;
+        Transform linkedChild = linkedObject.transform.Find(other.name);
+        if (linkedChild != null)
+        {
+            linkedChild.gameObject.SetActive(false);
+        }
     }
 }
