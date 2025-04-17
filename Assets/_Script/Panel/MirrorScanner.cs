@@ -1,77 +1,89 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 
-public class MirrorPanelClone : MonoBehaviour
+/// <summary>
+/// Gắn script này vào Panel A hoặc B. Script sẽ tự động quét vùng panel liên kết
+/// và sinh ra clone các object có gắn CloneableObject trong vùng.
+/// </summary>
+public class MirrorPanelCloner : MonoBehaviour
 {
-    public Transform linkedPanel;
-    public LayerMask targetLayer;
-    public GameObject objectClonePrefab; // prefab c� SpriteRenderer + Collider
+    public Transform linkedPanel;                 // Panel còn lại để quét
+    public LayerMask targetLayer;                 // Layer của object gốc
+    public GameObject objectClonePrefab;          // Prefab dùng để clone (có collider)
 
-    private BoxCollider2D col;
-    private Dictionary<Transform, GameObject> clones = new Dictionary<Transform, GameObject>();
+    private BoxCollider2D scanCollider;           // Vùng quét
+    private Dictionary<Transform, GameObject> clones = new(); // clone theo object gốc
 
     void Awake()
     {
-        col = GetComponent<BoxCollider2D>();
+        scanCollider = GetComponent<BoxCollider2D>();
+        if (!scanCollider)
+            Debug.LogError("Cần gắn BoxCollider2D lên panel để làm vùng quét!");
     }
 
     void Update()
     {
-        UpdateMirrorClones();
+        if (!linkedPanel || !objectClonePrefab || scanCollider == null) return;
+
+        SyncClones();
     }
 
-    void UpdateMirrorClones()
+    void SyncClones()
     {
-        // 1. X�c ??nh c�c object n?m trong v�ng qu�t c?a linkedPanel
-        Collider2D[] hits = Physics2D.OverlapBoxAll(linkedPanel.position, col.size, 0f, targetLayer);
-        HashSet<Transform> found = new HashSet<Transform>();
+        Vector2 scanSize = scanCollider.size;
+        Vector2 scanCenter = linkedPanel.position;
+
+        Collider2D[] hits = Physics2D.OverlapBoxAll(scanCenter, scanSize, 0f, targetLayer);
+        HashSet<Transform> currentVisible = new();
 
         foreach (var hit in hits)
         {
-            Transform original = hit.transform;
-            found.Add(original);
+            var cloneable = hit.GetComponentInParent<CloneableObject>();
+            if (cloneable == null) continue;
 
-            // N?u clone ch?a t?n t?i ? t?o m?i
-            if (!clones.ContainsKey(original))
+            Transform original = cloneable.transform;
+            if (currentVisible.Contains(original)) continue; // Tránh lặp
+
+            currentVisible.Add(original);
+
+            // Vị trí mirrored
+            Vector2 offset = (Vector2)original.position - (Vector2)linkedPanel.position;
+            Vector2 mirroredPos = (Vector2)transform.position + offset;
+
+            if (!clones.ContainsKey(original) || clones[original] == null)
             {
-                Vector2 offset = original.position - linkedPanel.position;
-                Vector2 mirroredPos = (Vector2)transform.position + offset;
-
-                GameObject clone = Instantiate(objectClonePrefab, mirroredPos, original.rotation, transform);
+                GameObject clone = Instantiate(objectClonePrefab, mirroredPos, original.rotation);
+                clone.transform.localScale = original.lossyScale;
                 clones[original] = clone;
             }
             else
             {
-                // Update v? tr� clone n?u c?n
-                Vector2 offset = original.position - linkedPanel.position;
-                Vector2 mirroredPos = (Vector2)transform.position + offset;
-                clones[original].transform.position = mirroredPos;
+                GameObject clone = clones[original];
+                clone.transform.position = mirroredPos;
+                clone.transform.rotation = original.rotation;
+                clone.transform.localScale = original.lossyScale;
             }
         }
 
-        // 2. Xo� nh?ng clone kh�ng c�n t?n t?i trong v�ng
-        List<Transform> toRemove = new List<Transform>();
+        // Huỷ clone không còn trong vùng
+        List<Transform> toRemove = new();
         foreach (var pair in clones)
         {
-            if (!found.Contains(pair.Key))
+            if (!currentVisible.Contains(pair.Key))
             {
                 Destroy(pair.Value);
                 toRemove.Add(pair.Key);
             }
         }
-
-        foreach (var key in toRemove)
-        {
-            clones.Remove(key);
-        }
+        foreach (var key in toRemove) clones.Remove(key);
     }
 
     void OnDrawGizmosSelected()
     {
-        if (col != null)
+        if (scanCollider != null && linkedPanel != null)
         {
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawWireCube(linkedPanel.position, col.size);
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireCube(linkedPanel.position, scanCollider.size);
         }
     }
 }
